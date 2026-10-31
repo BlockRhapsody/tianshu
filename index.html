@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>天枢</title>
+<style>
+*{-webkit-touch-callout:none;-webkit-user-callout:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-user-drag:none;-khtml-user-drag:none;user-drag:none;-webkit-user-modify:read-only;-moz-user-modify:read-only}
+::selection{background:transparent}
+::-moz-selection{background:transparent}
+html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:#07070a;font-family:'Times New Roman',serif}
+
+.container{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
+
+.clock{
+  position:relative;
+  width:85vmin;height:85vmin;
+  border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,#0f0f14 0%,#07070a 75%);
+  box-shadow:0 0 0 0.5px rgba(255,255,255,0.06),inset 0 0 30px rgba(0,0,0,0.8);
+}
+
+.tick{position:absolute;width:1px;height:100%;left:50%;top:0;transform-origin:50% 50%}
+.tick::before{content:'';position:absolute;top:3%;left:50%;transform:translateX(-50%);width:1px;height:5%;background:rgba(255,255,255,0.1)}
+.tick.major::before{width:1.5px;height:9%;background:rgba(255,255,255,0.25)}
+
+.numeral{position:absolute;font-size:3.5vmin;color:rgba(255,255,255,0.45);transform:translate(-50%,-50%);letter-spacing:0.05em}
+
+.hand-container{position:absolute;inset:0;transform-origin:50% 50%}
+.hand{position:absolute;left:50%;bottom:50%;transform-origin:bottom center;border-radius:1px}
+
+.hand-hour{width:3px;height:22%;margin-left:-1.5px;background:rgba(255,255,255,0.85);box-shadow:0 0 4px rgba(255,255,255,0.2)}
+.hand-minute{width:2px;height:32%;margin-left:-1px;background:rgba(255,255,255,0.55);box-shadow:0 0 3px rgba(255,255,255,0.15)}
+.hand-second{width:1px;height:40%;margin-left:-0.5px;background:rgba(200,180,140,0.8)}
+
+.center-dot{position:absolute;width:8px;height:8px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;background:rgba(200,180,140,0.9);z-index:10}
+
+.date-display{position:absolute;bottom:22%;left:50%;transform:translateX(-50%);font-size:1.6vmin;color:rgba(255,255,255,0.2);letter-spacing:0.25em}
+
+.sky-glow{position:fixed;width:120vmin;height:120vmin;border-radius:50%;pointer-events:none;opacity:0.12;transition:background 2s ease;z-index:0}
+
+.millisecond{position:absolute;bottom:16%;left:50%;transform:translateX(-50%);font-size:1vmin;color:rgba(255,255,255,0.12);letter-spacing:0.3em;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="sky-glow" id="skyGlow"></div>
+<div class="container">
+<div class="clock" id="clock">
+  <div class="date-display" id="dateDisplay"></div>
+  <div class="millisecond" id="msDisplay"></div>
+  <div class="hand-container" id="hourContainer"><div class="hand hand-hour"></div></div>
+  <div class="hand-container" id="minuteContainer"><div class="hand hand-minute"></div></div>
+  <div class="hand-container" id="secondContainer"><div class="hand hand-second"></div></div>
+  <div class="center-dot"></div>
+</div>
+</div>
+<script>
+const clock=document.getElementById('clock');
+const hc=document.getElementById('hourContainer');
+const mc=document.getElementById('minuteContainer');
+const sc=document.getElementById('secondContainer');
+const dd=document.getElementById('dateDisplay');
+const sg=document.getElementById('skyGlow');
+const msd=document.getElementById('msDisplay');
+
+for(let i=0;i<60;i++){
+  const t=document.createElement('div');
+  t.className='tick'+(i%5===0?' major':'');
+  t.style.transform='rotate('+i*6+'deg)';
+  clock.appendChild(t);
+}
+
+[['XII',0],['III',90],['VI',180],['IX',270]].forEach(function(pair){
+  const e=document.createElement('div');
+  e.className='numeral';
+  const r=(pair[1]-90)*Math.PI/180;
+  e.style.left=(50+33*Math.cos(r))+'%';
+  e.style.top=(50+33*Math.sin(r))+'%';
+  e.textContent=pair[0];
+  clock.appendChild(e);
+});
+
+function jd(d){
+  const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate(),h=d.getHours(),mn=d.getMinutes(),s=d.getSeconds();
+  const a=Math.floor((14-m)/12);
+  const yr=y+4800-a;
+  const mo=m+12*a-3;
+  const j=day+Math.floor((153*mo+2)/5)+365*yr+Math.floor(yr/4)-Math.floor(yr/100)+Math.floor(yr/400)-32045;
+  return j+(h-12)/24+mn/1440+s/86400;
+}
+
+function sunAlt(d){
+  const j=jd(d)-2451545;
+  let L=(280.46+0.9856474*j)%360;
+  if(L<0)L+=360;
+  let g=(357.528+0.9856003*j)%360;
+  if(g<0)g+=360;
+  const lam=L+1.915*Math.sin(g*Math.PI/180)+0.02*Math.sin(2*g*Math.PI/180);
+  const eps=23.439-0.0000004*j;
+  const dec=Math.asin(Math.sin(lam*Math.PI/180)*Math.sin(eps*Math.PI/180))*180/Math.PI;
+  const ha=((d.getUTCHours()+d.getUTCMinutes()/60+116.4/15)*15-180);
+  const lat=39.9;
+  const sa=Math.sin(lat*Math.PI/180)*Math.sin(dec*Math.PI/180)+Math.cos(lat*Math.PI/180)*Math.cos(dec*Math.PI/180)*Math.cos(ha*Math.PI/180);
+  return Math.asin(Math.max(-1,Math.min(1,sa)))*180/Math.PI;
+}
+
+function update(){
+  const n=new Date();
+  const h=n.getHours()%12;
+  const m=n.getMinutes();
+  const s=n.getSeconds();
+  const ms=n.getMilliseconds();
+  const ss=s+ms/1000;
+  const mm=m+ss/60;
+  const hh=h+mm/60;
+
+  sc.style.transform='rotate('+ss*6+'deg)';
+  mc.style.transform='rotate('+mm*6+'deg)';
+  hc.style.transform='rotate('+hh*30+'deg)';
+
+  const y=n.getFullYear(),mo=n.getMonth()+1,d=n.getDate();
+  dd.textContent=y+'.'+String(mo).padStart(2,'0')+'.'+String(d).padStart(2,'0');
+  msd.textContent=String(ms).padStart(3,'0');
+
+  const alt=sunAlt(n);
+  let hue,lit;
+  if(alt>20){hue=40;lit=14}
+  else if(alt>3){hue=205;lit=10+alt*0.4}
+  else if(alt>0){hue=30;lit=8+alt*0.6}
+  else if(alt>-4){hue=20;lit=6}
+  else if(alt>-10){hue=260;lit=4}
+  else{hue=240;lit=3}
+
+  sg.style.background='radial-gradient(circle,hsla('+hue+',50%,'+lit+'%,1) 0%,transparent 70%)';
+  requestAnimationFrame(update);
+}
+update();
+</script>
+</body>
+</html>
